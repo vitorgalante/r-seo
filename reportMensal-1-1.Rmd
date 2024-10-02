@@ -1,0 +1,409 @@
+---
+title: "Relatório Mensal"
+author: "Vitor R. Galante"
+output: html_document
+params:
+  meses: ["agosto", "setembro"]  # Altere os meses aqui
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(stringr)
+library(knitr)
+library(kableExtra)
+
+# Usando os meses dos parâmetros
+meses <- params$meses
+```
+
+```{r}
+# Definindo as Funções
+
+extrair_categoria <- function(url) {
+  str_extract(url, "(?<=/faq/)[^/]+")
+}
+
+categorizar_tier <- function(pos) {
+  case_when(
+    pos <= 3 ~ "1-3",
+    pos > 3 & pos <= 10 ~ "4-10",
+    pos > 10 & pos <= 20 ~ "11-20",
+    pos > 20 & pos <= 30 ~ "21-30",
+    pos > 30 & pos <= 40 ~ "31-40",
+    pos > 40 & pos <= 50 ~ "41-50",
+    pos > 50 ~ "50+"
+  )
+}
+
+processar_dados <- function(df) {
+  df %>%
+    mutate(
+      pos = as.double(gsub(",", ".", pos)),
+      impre = as.double(gsub(",", ".", impre)),
+      cliques = as.double(gsub(",", ".", cliques)),
+      categoria = extrair_categoria(page),
+      tier = categorizar_tier(pos)
+    )
+}
+
+contar_keywords_por_tier <- function(df, mes) {
+  df %>%
+    group_by(tier) %>%
+    summarise(keywords = n()) %>%
+    mutate(mes = mes)
+}
+
+contar_keywords_por_tier_categoria <- function(df, mes) {
+  df %>%
+    group_by(tier, categoria) %>%
+    summarise(keywords = n()) %>%
+    mutate(mes = mes)
+}
+
+calcular_metricas <- function(df) {
+  list(
+    total_cliques = sum(df$cliques, na.rm = TRUE),
+    total_impressoes = sum(df$impre, na.rm = TRUE),
+    posicao_media = mean(df$pos, na.rm = TRUE),
+    total_keywords = n_distinct(df$query),
+    total_paginas = n_distinct(df$page)
+  )
+}
+
+comparar_metricas <- function(metricas_mes1, metricas_mes2) {
+  list(
+    crescimento_cliques = (metricas_mes2$total_cliques - metricas_mes1$total_cliques) / metricas_mes1$total_cliques * 100,
+    crescimento_impressoes = (metricas_mes2$total_impressoes - metricas_mes1$total_impressoes) / metricas_mes1$total_impressoes * 100,
+    mudanca_posicao_media = metricas_mes1$posicao_media - metricas_mes2$posicao_media,
+    mudanca_keywords = metricas_mes2$total_keywords - metricas_mes1$total_keywords,
+    mudanca_paginas = metricas_mes2$total_paginas - metricas_mes1$total_paginas
+  )
+}
+
+# Novas funções para as análises adicionais
+
+calcular_crescimento_categorias <- function(df_mes1, df_mes2, mes1, mes2) {
+  cliques_mes1 <- df_mes1 %>%
+    group_by(categoria) %>%
+    summarise(total_cliques_mes1 = sum(cliques))
+  
+  cliques_mes2 <- df_mes2 %>%
+    group_by(categoria) %>%
+    summarise(total_cliques_mes2 = sum(cliques))
+  
+  comparacao <- cliques_mes2 %>%
+    left_join(cliques_mes1, by = "categoria") %>%
+    mutate(
+      total_cliques_mes1 = replace_na(total_cliques_mes1, 0),
+      variacao_cliques = total_cliques_mes2 - total_cliques_mes1,
+      crescimento_percentual = (variacao_cliques / total_cliques_mes1) * 100
+    )
+  
+  return(comparacao)
+}
+
+identificar_paginas_80 <- function(df) {
+  paginas <- df %>%
+    group_by(page) %>%
+    summarise(total_cliques = sum(cliques)) %>%
+    arrange(desc(total_cliques)) %>%
+    mutate(cliques_acumulados = cumsum(total_cliques) / sum(total_cliques) * 100)
+  
+  paginas_80 <- paginas %>%
+    filter(cliques_acumulados <= 80)
+  
+  percentual_paginas_80 <- nrow(paginas_80) / n_distinct(df$page) * 100
+  
+  list(paginas_80 = paginas_80, percentual_paginas_80 = percentual_paginas_80)
+}
+
+identificar_paginas_perderam_trafego <- function(df_mes1, df_mes2) {
+  paginas_mes1 <- df_mes1 %>%
+    group_by(page) %>%
+    summarise(total_cliques_mes1 = sum(cliques))
+  
+  paginas_mes2 <- df_mes2 %>%
+    group_by(page) %>%
+    summarise(total_cliques_mes2 = sum(cliques))
+  
+  comparacao_paginas <- paginas_mes2 %>%
+    full_join(paginas_mes1, by = "page") %>%
+    mutate(
+      total_cliques_mes1 = replace_na(total_cliques_mes1, 0),
+      total_cliques_mes2 = replace_na(total_cliques_mes2, 0),
+      diferenca_cliques = total_cliques_mes2 - total_cliques_mes1
+    )
+  
+  paginas_perderam <- comparacao_paginas %>%
+    arrange(diferenca_cliques) %>%
+    filter(diferenca_cliques < 0)
+  
+  return(paginas_perderam)
+}
+
+obter_top_keywords <- function(df, top_n = 10) {
+  df %>%
+    group_by(query) %>%
+    summarise(total_cliques = sum(cliques)) %>%
+    arrange(desc(total_cliques)) %>%
+    head(top_n)
+}
+
+comparar_top_keywords <- function(df_mes1, df_mes2, top_n = 10) {
+  top_keywords_mes1 <- obter_top_keywords(df_mes1, top_n) %>%
+    rename(total_cliques_mes1 = total_cliques)
+  
+  top_keywords_mes2 <- obter_top_keywords(df_mes2, top_n) %>%
+    rename(total_cliques_mes2 = total_cliques)
+  
+  comparacao <- top_keywords_mes1 %>%
+    full_join(top_keywords_mes2, by = "query") %>%
+    replace_na(list(total_cliques_mes1 = 0, total_cliques_mes2 = 0))
+  
+  return(comparacao)
+}
+```
+
+```{r}
+# Processamento dos Dados
+
+lista_resultados <- list()
+lista_contagens_tier <- list()
+lista_contagens_categoria <- list()
+metricas_por_mes <- list()
+
+for (mes in meses) {
+  arquivo <- paste0("resultados-gsc-", mes, ".csv")
+  
+  if (file.exists(arquivo)) {
+    # Leitura do arquivo
+    df <- read.csv(arquivo)
+    
+    # Processamento dos dados
+    df <- processar_dados(df)
+    
+    # Armazenando o dataframe processado
+    lista_resultados[[mes]] <- df
+    
+    # Contagem por tier
+    contagem_tier <- contar_keywords_por_tier(df, mes)
+    lista_contagens_tier[[mes]] <- contagem_tier
+    
+    # Contagem por tier e categoria
+    contagem_categoria <- contar_keywords_por_tier_categoria(df, mes)
+    lista_contagens_categoria[[mes]] <- contagem_categoria
+    
+    # Calculando métricas
+    metricas <- calcular_metricas(df)
+    metricas_por_mes[[mes]] <- metricas
+  } else {
+    warning(paste("Arquivo não encontrado:", arquivo))
+  }
+}
+
+# Combinando as contagens
+contagem_total_tier <- bind_rows(lista_contagens_tier)
+contagem_total_categoria <- bind_rows(lista_contagens_categoria)
+
+# Definindo a ordem dos tiers
+niveis_tier <- c("1-3", "4-10", "11-20", "21-30", "31-40", "41-50", "50+")
+contagem_total_tier$tier <- factor(contagem_total_tier$tier, levels = niveis_tier)
+contagem_total_categoria$tier <- factor(contagem_total_categoria$tier, levels = niveis_tier)
+```
+
+```{r}
+# Visualização Geral por Tier
+
+ggplot(contagem_total_tier, aes(x = tier, y = keywords, fill = mes)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Quantidade de Keywords por Tier de Posição",
+    x = "Tier de Posição",
+    y = "Quantidade de Keywords",
+    fill = "Mês"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Visualização por Categoria
+
+categorias <- unique(contagem_total_categoria$categoria)
+
+for (cat in categorias) {
+  dados_categoria <- contagem_total_categoria %>%
+    filter(categoria == cat)
+  
+  if (nrow(dados_categoria) > 0) {
+    p <- ggplot(dados_categoria, aes(x = tier, y = keywords, fill = mes)) +
+      geom_bar(stat = "identity", position = "dodge") +
+      labs(
+        title = paste("Evolução das Keywords para Categoria:", cat),
+        x = "Tier de Posição",
+        y = "Quantidade de Keywords",
+        fill = "Mês"
+      ) +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+    
+    print(p)
+  }
+}
+```
+
+```{r}
+# Comparação de Métricas
+
+# Garantindo que temos pelo menos dois meses para comparar
+if (length(meses) >= 2) {
+  mes1 <- meses[1]
+  mes2 <- meses[2]
+  
+  comparacao <- comparar_metricas(metricas_por_mes[[mes1]], metricas_por_mes[[mes2]])
+  
+  # Exibindo os resultados
+  cat("## Comparação entre", mes1, "e", mes2, "\n\n")
+  
+  cat("**Total de cliques em", mes1, ":", metricas_por_mes[[mes1]]$total_cliques, "**\n\n")
+  cat("**Total de cliques em", mes2, ":", metricas_por_mes[[mes2]]$total_cliques, "**\n\n")
+  cat("**Crescimento dos cliques:", round(comparacao$crescimento_cliques, 2), "%**\n\n")
+  
+  cat("**Total de impressões em", mes1, ":", metricas_por_mes[[mes1]]$total_impressoes, "**\n\n")
+  cat("**Total de impressões em", mes2, ":", metricas_por_mes[[mes2]]$total_impressoes, "**\n\n")
+  cat("**Crescimento das impressões:", round(comparacao$crescimento_impressoes, 2), "%**\n\n")
+  
+  cat("**Posição média em", mes1, ":", round(metricas_por_mes[[mes1]]$posicao_media, 2), "**\n\n")
+  cat("**Posição média em", mes2, ":", round(metricas_por_mes[[mes2]]$posicao_media, 2), "**\n\n")
+  cat("**Melhoria na posição média (negativo é bom):", round(comparacao$mudanca_posicao_media, 2), "**\n\n")
+  
+  cat("**Quantidade de keywords em", mes1, ":", metricas_por_mes[[mes1]]$total_keywords, "**\n\n")
+  cat("**Quantidade de keywords em", mes2, ":", metricas_por_mes[[mes2]]$total_keywords, "**\n\n")
+  cat("**Mudança no número de keywords:", comparacao$mudanca_keywords, "**\n\n")
+  
+  cat("**Quantidade de páginas em", mes1, ":", metricas_por_mes[[mes1]]$total_paginas, "**\n\n")
+  cat("**Quantidade de páginas em", mes2, ":", metricas_por_mes[[mes2]]$total_paginas, "**\n\n")
+  cat("**Mudança no número de páginas:", comparacao$mudanca_paginas, "**\n\n")
+  
+  # Implementação das novas análises
+  
+  # Melhores Categorias (Em Crescimento)
+  crescimento_categorias <- calcular_crescimento_categorias(lista_resultados[[mes1]], lista_resultados[[mes2]], mes1, mes2)
+  
+  melhores_categorias <- crescimento_categorias %>%
+    arrange(desc(crescimento_percentual))
+  
+  # Visualizando o top 5 categorias que mais cresceram
+  melhores_categorias %>%
+    head(5) %>%
+    ggplot(aes(x = reorder(categoria, crescimento_percentual), y = crescimento_percentual)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(
+      title = paste("Top 5 Categorias com Maior Crescimento (%) entre", mes1, "e", mes2),
+      x = "Categoria",
+      y = "Crescimento (%)"
+    )
+  
+  # Páginas Responsáveis por 80% dos Cliques
+  resultado_paginas_80 <- identificar_paginas_80(lista_resultados[[mes2]])
+  paginas_80 <- resultado_paginas_80$paginas_80
+  percentual_paginas_80 <- resultado_paginas_80$percentual_paginas_80
+  
+  paginas_80 %>%
+    select(page, total_cliques, cliques_acumulados) %>%
+    kable(
+      col.names = c("Página", "Total de Cliques", "Contribuição Acumulada (%)"),
+      caption = paste("Páginas Responsáveis por 80% dos Cliques em", mes2)
+    ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+  
+  cat("O grupo de páginas responsáveis por 80% dos cliques representa ", round(percentual_paginas_80, 2), "% do total de páginas únicas em", mes2, ".\n")
+  
+  # Crescimento Médio de Cliques por Categoria
+  ggplot(crescimento_categorias, aes(x = reorder(categoria, crescimento_percentual), y = crescimento_percentual, fill = crescimento_percentual > 0)) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual(values = c("TRUE" = "steelblue", "FALSE" = "red")) +
+    coord_flip() +
+    labs(
+      title = paste("Crescimento Percentual de Cliques por Categoria entre", mes1, "e", mes2),
+      x = "Categoria",
+      y = "Crescimento (%)"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+  
+  # Páginas que Mais Perderam Tráfego
+  paginas_perderam_trafego <- identificar_paginas_perderam_trafego(lista_resultados[[mes1]], lista_resultados[[mes2]])
+  
+  top_paginas_perderam <- paginas_perderam_trafego %>%
+    head(5)
+  
+  top_paginas_perderam %>%
+    select(page, total_cliques_mes1, total_cliques_mes2, diferenca_cliques) %>%
+    kable(
+      col.names = c("Página", paste("Cliques em", mes1), paste("Cliques em", mes2), "Diferença de Cliques"),
+      caption = paste("Top 5 Páginas que Mais Perderam Tráfego entre", mes1, "e", mes2)
+    ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+  
+  # Keywords com Mais Cliques no Último Mês
+  top_keywords_mes2 <- obter_top_keywords(lista_resultados[[mes2]], top_n = 10)
+  
+  top_keywords_mes2 %>%
+    kable(
+      col.names = c("Keyword", paste("Total de Cliques em", mes2)),
+      caption = paste("Top 10 Keywords com Mais Cliques em", mes2)
+    ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+  
+  # Comparação das Keywords Entre Meses
+  comparacao_top_keywords <- comparar_top_keywords(lista_resultados[[mes1]], lista_resultados[[mes2]], top_n = 10)
+  
+  comparacao_top_keywords %>%
+    kable(
+      col.names = c("Keyword", paste("Cliques em", mes1), paste("Cliques em", mes2)),
+      caption = paste("Comparação das Top 10 Keywords entre", mes1, "e", mes2)
+    ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+  
+} else {
+  cat("É necessário pelo menos dois meses para realizar a comparação.\n")
+}
+```
+
+```{r}
+# Páginas Responsáveis por 80% dos Cliques no Último Mês
+
+# Primeiro, verificamos se temos pelo menos um mês de dados
+if (length(meses) >= 1) {
+  # Selecionamos o último mês da lista
+  mes_atual <- tail(meses, n = 1)
+  
+  # Obtemos o dataframe do último mês
+  df_atual <- lista_resultados[[mes_atual]]
+  
+  # Identificamos as páginas responsáveis por 80% dos cliques
+  resultado_paginas_80 <- identificar_paginas_80(df_atual)
+  paginas_80 <- resultado_paginas_80$paginas_80
+  percentual_paginas_80 <- resultado_paginas_80$percentual_paginas_80
+  
+  # Apresentamos a tabela formatada
+  paginas_80 %>%
+    select(page, total_cliques, cliques_acumulados) %>%
+    mutate(
+      total_cliques = round(total_cliques, 2),
+      cliques_acumulados = round(cliques_acumulados, 2)
+    ) %>%
+    kable(
+      col.names = c("Página", "Total de Cliques", "Contribuição Acumulada (%)"),
+      caption = paste("Páginas Responsáveis por 80% dos Cliques em", mes_atual)
+    ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+  
+  # Exibimos o percentual de páginas
+  cat("O grupo de páginas responsáveis por 80% dos cliques representa ", round(percentual_paginas_80, 2), "% do total de páginas únicas em", mes_atual, ".\n")
+  
+} else {
+  cat("Não há dados suficientes para analisar as páginas que geraram 80% do tráfego.\n")
+}
+```
