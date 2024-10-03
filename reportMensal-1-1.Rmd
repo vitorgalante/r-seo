@@ -7,22 +7,28 @@ params:
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = TRUE,
+  warning = TRUE
+)
 library(tidyverse)
 library(stringr)
 library(knitr)
 library(kableExtra)
 
-# Usando os meses dos parâmetros
 meses <- params$meses
 ```
 
-```{r}
+```{r functions, echo=FALSE, message=TRUE, warning=TRUE, paged.print=TRUE}
 # Definindo as Funções
 
+# Função para extrair categoria da URL
 extrair_categoria <- function(url) {
   str_extract(url, "(?<=/faq/)[^/]+")
 }
 
+# Função para categorizar a posição em tiers
 categorizar_tier <- function(pos) {
   case_when(
     pos <= 3 ~ "1-3",
@@ -35,6 +41,7 @@ categorizar_tier <- function(pos) {
   )
 }
 
+# Função para processar os dados
 processar_dados <- function(df) {
   df %>%
     mutate(
@@ -46,6 +53,7 @@ processar_dados <- function(df) {
     )
 }
 
+# Função para contar keywords por tier
 contar_keywords_por_tier <- function(df, mes) {
   df %>%
     group_by(tier) %>%
@@ -53,6 +61,7 @@ contar_keywords_por_tier <- function(df, mes) {
     mutate(mes = mes)
 }
 
+# Função para contar keywords por tier e categoria
 contar_keywords_por_tier_categoria <- function(df, mes) {
   df %>%
     group_by(tier, categoria) %>%
@@ -60,6 +69,7 @@ contar_keywords_por_tier_categoria <- function(df, mes) {
     mutate(mes = mes)
 }
 
+# Função para calcular métricas
 calcular_metricas <- function(df) {
   list(
     total_cliques = sum(df$cliques, na.rm = TRUE),
@@ -70,38 +80,41 @@ calcular_metricas <- function(df) {
   )
 }
 
-comparar_metricas <- function(metricas_mes1, metricas_mes2) {
+# Função para comparar métricas
+comparar_metricas <- function(metricas_mes_anterior, metricas_mes_atual) {
   list(
-    crescimento_cliques = (metricas_mes2$total_cliques - metricas_mes1$total_cliques) / metricas_mes1$total_cliques * 100,
-    crescimento_impressoes = (metricas_mes2$total_impressoes - metricas_mes1$total_impressoes) / metricas_mes1$total_impressoes * 100,
-    mudanca_posicao_media = metricas_mes1$posicao_media - metricas_mes2$posicao_media,
-    mudanca_keywords = metricas_mes2$total_keywords - metricas_mes1$total_keywords,
-    mudanca_paginas = metricas_mes2$total_paginas - metricas_mes1$total_paginas
+    crescimento_cliques = (metricas_mes_atual$total_cliques - metricas_mes_anterior$total_cliques) / metricas_mes_anterior$total_cliques * 100,
+    crescimento_impressoes = (metricas_mes_atual$total_impressoes - metricas_mes_anterior$total_impressoes) / metricas_mes_anterior$total_impressoes * 100,
+    mudanca_posicao_media = metricas_mes_anterior$posicao_media - metricas_mes_atual$posicao_media,
+    mudanca_keywords = metricas_mes_atual$total_keywords - metricas_mes_anterior$total_keywords,
+    mudanca_paginas = metricas_mes_atual$total_paginas - metricas_mes_anterior$total_paginas
   )
 }
 
-# Novas funções para as análises adicionais
+# Funções adicionais para as análises extras
 
-calcular_crescimento_categorias <- function(df_mes1, df_mes2, mes1, mes2) {
-  cliques_mes1 <- df_mes1 %>%
+# Função para calcular crescimento por categoria
+calcular_crescimento_categorias <- function(df_mes_anterior, df_mes_atual) {
+  cliques_mes_anterior <- df_mes_anterior %>%
     group_by(categoria) %>%
-    summarise(total_cliques_mes1 = sum(cliques))
+    summarise(total_cliques_mes_anterior = sum(cliques))
   
-  cliques_mes2 <- df_mes2 %>%
+  cliques_mes_atual <- df_mes_atual %>%
     group_by(categoria) %>%
-    summarise(total_cliques_mes2 = sum(cliques))
+    summarise(total_cliques_mes_atual = sum(cliques))
   
-  comparacao <- cliques_mes2 %>%
-    left_join(cliques_mes1, by = "categoria") %>%
+  comparacao <- cliques_mes_atual %>%
+    left_join(cliques_mes_anterior, by = "categoria") %>%
     mutate(
-      total_cliques_mes1 = replace_na(total_cliques_mes1, 0),
-      variacao_cliques = total_cliques_mes2 - total_cliques_mes1,
-      crescimento_percentual = (variacao_cliques / total_cliques_mes1) * 100
+      total_cliques_mes_anterior = replace_na(total_cliques_mes_anterior, 0),
+      variacao_cliques = total_cliques_mes_atual - total_cliques_mes_anterior,
+      crescimento_percentual = (variacao_cliques / total_cliques_mes_anterior) * 100
     )
   
   return(comparacao)
 }
 
+# Função para identificar páginas que contribuem com 80% dos cliques
 identificar_paginas_80 <- function(df) {
   paginas <- df %>%
     group_by(page) %>%
@@ -117,21 +130,22 @@ identificar_paginas_80 <- function(df) {
   list(paginas_80 = paginas_80, percentual_paginas_80 = percentual_paginas_80)
 }
 
-identificar_paginas_perderam_trafego <- function(df_mes1, df_mes2) {
-  paginas_mes1 <- df_mes1 %>%
+# Função para identificar páginas que perderam tráfego
+identificar_paginas_perderam_trafego <- function(df_mes_anterior, df_mes_atual) {
+  paginas_mes_anterior <- df_mes_anterior %>%
     group_by(page) %>%
-    summarise(total_cliques_mes1 = sum(cliques))
+    summarise(total_cliques_mes_anterior = sum(cliques))
   
-  paginas_mes2 <- df_mes2 %>%
+  paginas_mes_atual <- df_mes_atual %>%
     group_by(page) %>%
-    summarise(total_cliques_mes2 = sum(cliques))
+    summarise(total_cliques_mes_atual = sum(cliques))
   
-  comparacao_paginas <- paginas_mes2 %>%
-    full_join(paginas_mes1, by = "page") %>%
+  comparacao_paginas <- paginas_mes_atual %>%
+    full_join(paginas_mes_anterior, by = "page") %>%
     mutate(
-      total_cliques_mes1 = replace_na(total_cliques_mes1, 0),
-      total_cliques_mes2 = replace_na(total_cliques_mes2, 0),
-      diferenca_cliques = total_cliques_mes2 - total_cliques_mes1
+      total_cliques_mes_anterior = replace_na(total_cliques_mes_anterior, 0),
+      total_cliques_mes_atual = replace_na(total_cliques_mes_atual, 0),
+      diferenca_cliques = total_cliques_mes_atual - total_cliques_mes_anterior
     )
   
   paginas_perderam <- comparacao_paginas %>%
@@ -141,6 +155,7 @@ identificar_paginas_perderam_trafego <- function(df_mes1, df_mes2) {
   return(paginas_perderam)
 }
 
+# Função para obter as top keywords
 obter_top_keywords <- function(df, top_n = 10) {
   df %>%
     group_by(query) %>%
@@ -149,22 +164,31 @@ obter_top_keywords <- function(df, top_n = 10) {
     head(top_n)
 }
 
-comparar_top_keywords <- function(df_mes1, df_mes2, top_n = 10) {
-  top_keywords_mes1 <- obter_top_keywords(df_mes1, top_n) %>%
-    rename(total_cliques_mes1 = total_cliques)
+# Função para comparar as top keywords entre meses
+comparar_top_keywords <- function(df_mes_anterior, df_mes_atual, top_n = 10) {
+  top_keywords_mes_anterior <- obter_top_keywords(df_mes_anterior, top_n) %>%
+    rename(total_cliques_mes_anterior = total_cliques)
   
-  top_keywords_mes2 <- obter_top_keywords(df_mes2, top_n) %>%
-    rename(total_cliques_mes2 = total_cliques)
+  top_keywords_mes_atual <- obter_top_keywords(df_mes_atual, top_n) %>%
+    rename(total_cliques_mes_atual = total_cliques)
   
-  comparacao <- top_keywords_mes1 %>%
-    full_join(top_keywords_mes2, by = "query") %>%
-    replace_na(list(total_cliques_mes1 = 0, total_cliques_mes2 = 0))
+  comparacao <- top_keywords_mes_anterior %>%
+    full_join(top_keywords_mes_atual, by = "query") %>%
+    replace_na(list(total_cliques_mes_anterior = 0, total_cliques_mes_atual = 0))
   
   return(comparacao)
 }
+
+# Função para converter nome do mês em número
+mes_para_numero <- function(mes_nome) {
+  meses_nomes <- c("janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+  mes_numero <- match(tolower(mes_nome), meses_nomes)
+  return(mes_numero)
+}
 ```
 
-```{r}
+```{r echo=FALSE, message=TRUE, warning=TRUE, paged.print=TRUE}
 # Processamento dos Dados
 
 lista_resultados <- list()
