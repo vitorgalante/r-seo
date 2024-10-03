@@ -8,17 +8,18 @@ params:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo = FALSE,
-  message = TRUE,
-  warning = TRUE
+	echo = FALSE,
+	message = TRUE,
+	warning = TRUE
 )
 library(tidyverse)
 library(stringr)
 library(knitr)
 library(kableExtra)
+library(scales)  # Para formatação de percentuais
 ```
 
-```{R Definindo as Funções}
+```{r functions, echo=FALSE}
 # Função para extrair categoria da URL
 extrair_categoria <- function(url) {
   str_extract(url, "(?<=/faq/)[^/]+")
@@ -53,7 +54,7 @@ processar_dados <- function(df) {
 contar_keywords_por_tier <- function(df, mes) {
   df %>%
     group_by(tier) %>%
-    summarise(keywords = n()) %>%
+    summarise(keywords = n(), .groups = "drop") %>%
     mutate(mes = mes)
 }
 
@@ -61,7 +62,7 @@ contar_keywords_por_tier <- function(df, mes) {
 contar_keywords_por_tier_categoria <- function(df, mes) {
   df %>%
     group_by(tier, categoria) %>%
-    summarise(keywords = n()) %>%
+    summarise(keywords = n(), .groups = "drop") %>%
     mutate(mes = mes)
 }
 
@@ -104,7 +105,11 @@ calcular_crescimento_categorias <- function(df_mes_anterior, df_mes_atual) {
     mutate(
       total_cliques_mes_anterior = replace_na(total_cliques_mes_anterior, 0),
       variacao_cliques = total_cliques_mes_atual - total_cliques_mes_anterior,
-      crescimento_percentual = (variacao_cliques / total_cliques_mes_anterior) * 100
+      crescimento_percentual = if_else(
+        total_cliques_mes_anterior == 0,
+        NA_real_,
+        (variacao_cliques / total_cliques_mes_anterior) * 100
+      )
     )
   
   return(comparacao)
@@ -184,7 +189,8 @@ mes_para_numero <- function(mes_nome) {
 }
 ```
 
-```{r Usando meses dos parâmetros}
+
+```{r processamento, echo=FALSE}
 # Usando os meses dos parâmetros
 meses <- params$meses
 
@@ -237,23 +243,22 @@ contagem_total_tier$tier <- factor(contagem_total_tier$tier, levels = niveis_tie
 contagem_total_categoria$tier <- factor(contagem_total_categoria$tier, levels = niveis_tier)
 ```
 
-``` {r Análise Geral do Mês Atual}
-# Análise Geral do Mês Atual
+```{r analise_geral}
 mes_atual <- meses[length(meses)]  # Último mês da lista
 metricas_mes_atual <- metricas_por_mes[[mes_atual]]
-
-cat("## Análise Geral de", mes_atual, "\n\n")
-
-cat("**Total de cliques em", mes_atual, ":", metricas_mes_atual$total_cliques, "**\n\n")
-cat("**Total de impressões em", mes_atual, ":", metricas_mes_atual$total_impressoes, "**\n\n")
-cat("**Posição média em", mes_atual, ":", round(metricas_mes_atual$posicao_media, 2), "**\n\n")
-cat("**Quantidade de keywords em", mes_atual, ":", metricas_mes_atual$total_keywords, "**\n\n")
-cat("**Quantidade de páginas em", mes_atual, ":", metricas_mes_atual$total_paginas, "**\n\n")
 ```
 
-```{r Visualização Geral por Tier}
+## Análise Geral de `r mes_atual`
+
+- **Total de cliques em `r mes_atual`:** `r metricas_mes_atual$total_cliques`
+- **Total de impressões em `r mes_atual`:** `r metricas_mes_atual$total_impressoes`
+- **Posição média em `r mes_atual`:** `r round(metricas_mes_atual$posicao_media, 2)`
+- **Quantidade de keywords em `r mes_atual`:** `r metricas_mes_atual$total_keywords`
+- **Quantidade de páginas em `r mes_atual`:** `r metricas_mes_atual$total_paginas`
+
 # Visualização Geral por Tier
 
+```{r visualizacao_geral, echo=FALSE}
 ggplot(contagem_total_tier, aes(x = tier, y = keywords, fill = mes)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(
@@ -265,9 +270,9 @@ ggplot(contagem_total_tier, aes(x = tier, y = keywords, fill = mes)) +
   theme_minimal()
 ```
 
-```{r visualização por Categoria}
 # Visualização por Categoria
 
+```{r visualizacao_categorias, echo=FALSE}
 categorias <- unique(contagem_total_categoria$categoria)
 
 for (cat in categorias) {
@@ -291,41 +296,61 @@ for (cat in categorias) {
 }
 ```
 
-```{r comparação mes a mes}
 # Comparação de Métricas
 
-# Garantindo que temos pelo menos dois meses para comparar
+```{r comparacao_metricas, echo=FALSE}
 if (length(meses) >= 2) {
   mes_anterior <- meses[length(meses) - 1]  # Mês anterior
   mes_atual <- meses[length(meses)]         # Mês atual
   
   comparacao <- comparar_metricas(metricas_por_mes[[mes_anterior]], metricas_por_mes[[mes_atual]])
   
-  # Exibindo os resultados
-  cat("## Comparação entre", mes_anterior, "(mês anterior) e", mes_atual, "(mês atual)\n\n")
+  crescimento_cliques_formatado <- percent(comparacao$crescimento_cliques / 100, accuracy = 0.01)
+  crescimento_impressoes_formatado <- percent(comparacao$crescimento_impressoes / 100, accuracy = 0.01)
   
-  cat("**Total de cliques em", mes_anterior, ":", metricas_por_mes[[mes_anterior]]$total_cliques, "**\n\n")
-  cat("**Total de cliques em", mes_atual, ":", metricas_mes_atual$total_cliques, "**\n\n")
-  cat("**Crescimento dos cliques:", round(comparacao$crescimento_cliques, 2), "%**\n\n")
+  melhoria_posicao_media <- round(comparacao$mudanca_posicao_media, 2)
+  if (melhoria_posicao_media < 0) {
+    melhoria_posicao_media_formatado <- paste0(melhoria_posicao_media, " (melhoria)")
+  } else {
+    melhoria_posicao_media_formatado <- paste0(melhoria_posicao_media, " (piorou)")
+  }
+} else {
+  mensagem_comparacao <- "É necessário pelo menos dois meses para realizar a comparação."
+}
+```
+
+## Comparação entre `r mes_anterior` (mês anterior) e `r mes_atual` (mês atual)
+
+```{r resultados_comparacao, echo=FALSE}
+if (length(meses) >= 2) {
+  cat("- **Total de cliques em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_cliques, "\n")
+  cat("- **Total de cliques em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_cliques, "\n")
+  cat("- **Crescimento dos cliques:** ", crescimento_cliques_formatado, "\n")
   
-  cat("**Total de impressões em", mes_anterior, ":", metricas_por_mes[[mes_anterior]]$total_impressoes, "**\n\n")
-  cat("**Total de impressões em", mes_atual, ":", metricas_mes_atual$total_impressoes, "**\n\n")
-  cat("**Crescimento das impressões:", round(comparacao$crescimento_impressoes, 2), "%**\n\n")
+  cat("- **Total de impressões em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_impressoes, "\n")
+  cat("- **Total de impressões em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_impressoes, "\n")
+  cat("- **Crescimento das impressões:** ", crescimento_impressoes_formatado, "\n")
   
-  cat("**Posição média em", mes_anterior, ":", round(metricas_por_mes[[mes_anterior]]$posicao_media, 2), "**\n\n")
-  cat("**Posição média em", mes_atual, ":", round(metricas_mes_atual$posicao_media, 2), "**\n\n")
-  cat("**Melhoria na posição média (valor negativo indica melhoria):", round(comparacao$mudanca_posicao_media, 2), "**\n\n")
+  cat("- **Posição média em ", mes_anterior, ":** ", round(metricas_por_mes[[mes_anterior]]$posicao_media, 2), "\n")
+  cat("- **Posição média em ", mes_atual, ":** ", round(metricas_por_mes[[mes_atual]]$posicao_media, 2), "\n")
+  cat("- **Mudança na posição média:** ", melhoria_posicao_media_formatado, "\n")
   
-  cat("**Quantidade de keywords em", mes_anterior, ":", metricas_por_mes[[mes_anterior]]$total_keywords, "**\n\n")
-  cat("**Quantidade de keywords em", mes_atual, ":", metricas_mes_atual$total_keywords, "**\n\n")
-  cat("**Mudança no número de keywords:", comparacao$mudanca_keywords, "**\n\n")
+  cat("- **Quantidade de keywords em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_keywords, "\n")
+  cat("- **Quantidade de keywords em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_keywords, "\n")
+  cat("- **Mudança no número de keywords:** ", comparacao$mudanca_keywords, "\n")
   
-  cat("**Quantidade de páginas em", mes_anterior, ":", metricas_por_mes[[mes_anterior]]$total_paginas, "**\n\n")
-  cat("**Quantidade de páginas em", mes_atual, ":", metricas_mes_atual$total_paginas, "**\n\n")
-  cat("**Mudança no número de páginas:", comparacao$mudanca_paginas, "**\n\n")
-  
-  # Análises adicionais
-  
+  cat("- **Quantidade de páginas em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_paginas, "\n")
+  cat("- **Quantidade de páginas em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_paginas, "\n")
+  cat("- **Mudança no número de páginas:** ", comparacao$mudanca_paginas, "\n")
+} else {
+  cat(mensagem_comparacao)
+}
+```
+
+# Análises Adicionais
+
+```{r analises_adicionais, echo=FALSE}
+if (length(meses) >= 2) {
   # Crescimento por Categoria
   crescimento_categorias <- calcular_crescimento_categorias(lista_resultados[[mes_anterior]], lista_resultados[[mes_atual]])
   
@@ -363,35 +388,33 @@ if (length(meses) >= 2) {
   top_paginas_perderam <- paginas_perderam_trafego %>%
     head(5)
   
-  top_paginas_perderam %>%
-    select(page, total_cliques_mes_anterior, total_cliques_mes_atual, diferenca_cliques) %>%
-    kable(
-      col.names = c("Página", paste("Cliques em", mes_anterior), paste("Cliques em", mes_atual), "Diferença de Cliques"),
-      caption = paste("Top 5 Páginas que Mais Perderam Tráfego entre", mes_anterior, "e", mes_atual)
-    ) %>%
+  # Exibindo a tabela
+  kable(
+    top_paginas_perderam %>%
+      select(page, total_cliques_mes_anterior, total_cliques_mes_atual, diferenca_cliques),
+    col.names = c("Página", paste("Cliques em", mes_anterior), paste("Cliques em", mes_atual), "Diferença de Cliques"),
+    caption = paste("Top 5 Páginas que Mais Perderam Tráfego entre", mes_anterior, "e", mes_atual)
+  ) %>%
     kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
   
   # Comparação das Top Keywords Entre Meses
   comparacao_top_keywords <- comparar_top_keywords(lista_resultados[[mes_anterior]], lista_resultados[[mes_atual]], top_n = 10)
   
-  comparacao_top_keywords %>%
-    kable(
-      col.names = c("Keyword", paste("Cliques em", mes_anterior), paste("Cliques em", mes_atual)),
-      caption = paste("Comparação das Top 10 Keywords entre", mes_anterior, "e", mes_atual)
-    ) %>%
+  kable(
+    comparacao_top_keywords,
+    col.names = c("Keyword", paste("Cliques em", mes_anterior), paste("Cliques em", mes_atual)),
+    caption = paste("Comparação das Top 10 Keywords entre", mes_anterior, "e", mes_atual)
+  ) %>%
     kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
-  
-} else {
-  cat("É necessário pelo menos dois meses para realizar a comparação.\n")
 }
 ```
 
-``` {r proporção de pareto}
 # Páginas Responsáveis por 80% dos Cliques no Mês Atual
 
-# Verificamos se temos pelo menos um mês de dados
+```{r paginas_80, echo=FALSE}
 if (length(meses) >= 1) {
   # Obtemos o dataframe do mês atual
+  mes_atual <- meses[length(meses)]
   df_atual <- lista_resultados[[mes_atual]]
   
   # Identificamos as páginas responsáveis por 80% dos cliques
@@ -399,36 +422,47 @@ if (length(meses) >= 1) {
   paginas_80 <- resultado_paginas_80$paginas_80
   percentual_paginas_80 <- resultado_paginas_80$percentual_paginas_80
   
-  # Apresentamos a tabela formatada
-  paginas_80 %>%
+  # Preparamos a tabela formatada
+  tabela_paginas_80 <- paginas_80 %>%
     select(page, total_cliques, cliques_acumulados) %>%
     mutate(
       total_cliques = round(total_cliques, 2),
       cliques_acumulados = round(cliques_acumulados, 2)
-    ) %>%
-    kable(
-      col.names = c("Página", "Total de Cliques", "Contribuição Acumulada (%)"),
-      caption = paste("Páginas Responsáveis por 80% dos Cliques em", mes_atual)
-    ) %>%
-    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
-  
-  # Exibimos o percentual de páginas
-  cat("O grupo de páginas responsáveis por 80% dos cliques representa ", round(percentual_paginas_80, 2), "% do total de páginas únicas em", mes_atual, ".\n")
-  
+    )
 } else {
-  cat("Não há dados suficientes para analisar as páginas que geraram 80% do tráfego.\n")
+  tabela_paginas_80 <- NULL
+  mensagem_pagina_80 <- "Não há dados suficientes para analisar as páginas que geraram 80% do tráfego."
 }
 ```
 
-```{r KW com mais cliques}
+## Páginas Responsáveis por 80% dos Cliques no Mês Atual
+
+```{r resultados_paginas_80, echo=FALSE}
+if (length(meses) >= 1) {
+  cat("O grupo de páginas responsáveis por 80% dos cliques representa **", round(percentual_paginas_80, 2), "%** do total de páginas únicas em **", mes_atual, "**.\n")
+  
+  # Exibindo a tabela
+  kable(
+    tabela_paginas_80,
+    col.names = c("Página", "Total de Cliques", "Contribuição Acumulada (%)"),
+    caption = paste("Páginas Responsáveis por 80% dos Cliques em", mes_atual)
+  ) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+} else {
+  cat("**", mensagem_pagina_80, "**")
+}
+```
+
 # Keywords com Mais Cliques no Mês Atual
 
+```{r top_keywords_mes_atual, echo=FALSE}
 top_keywords_mes_atual <- obter_top_keywords(lista_resultados[[mes_atual]], top_n = 10)
 
-top_keywords_mes_atual %>%
-  kable(
-    col.names = c("Keyword", paste("Total de Cliques em", mes_atual)),
-    caption = paste("Top 10 Keywords com Mais Cliques em", mes_atual)
-  ) %>%
+# Exibindo a tabela
+kable(
+  top_keywords_mes_atual,
+  col.names = c("Keyword", paste("Total de Cliques em", mes_atual)),
+  caption = paste("Top 10 Keywords com Mais Cliques em", mes_atual)
+) %>%
   kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
 ```
