@@ -250,11 +250,12 @@ metricas_mes_atual <- metricas_por_mes[[mes_atual]]
 
 ## Análise Geral de `r mes_atual`
 
-- **Total de cliques em `r mes_atual`:** `r metricas_mes_atual$total_cliques`
-- **Total de impressões em `r mes_atual`:** `r metricas_mes_atual$total_impressoes`
+- **Total de cliques em `r mes_atual`:** `r scales::comma(metricas_mes_atual$total_cliques, big.mark = ".", decimal.mark = ",")`
+- **Total de impressões em `r mes_atual`:** `r scales::comma(metricas_mes_atual$total_impressoes, big.mark = ".", decimal.mark = ",")`
 - **Posição média em `r mes_atual`:** `r round(metricas_mes_atual$posicao_media, 2)`
-- **Quantidade de keywords em `r mes_atual`:** `r metricas_mes_atual$total_keywords`
-- **Quantidade de páginas em `r mes_atual`:** `r metricas_mes_atual$total_paginas`
+- **Quantidade de keywords em `r mes_atual`:** `r scales::comma(metricas_mes_atual$total_keywords, big.mark = ".", decimal.mark = ",")`
+- **Quantidade de páginas em `r mes_atual`:** `r scales::comma(metricas_mes_atual$total_paginas, big.mark = ".", decimal.mark = ",")`
+
 
 # Visualização Geral por Tier
 
