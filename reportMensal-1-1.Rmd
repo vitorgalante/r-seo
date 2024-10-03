@@ -1,5 +1,5 @@
 ---
-title: "Relatório Mensal 1.2"
+title: "Relatório Mensal 1.3"
 author: "Vitor R. Galante"
 output: html_document
 params:
@@ -324,29 +324,59 @@ if (length(meses) >= 2) {
 
 ```{r resultados_comparacao, echo=FALSE}
 if (length(meses) >= 2) {
-  cat("- **Total de cliques em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_cliques, "\n")
-  cat("- **Total de cliques em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_cliques, "\n")
-  cat("- **Crescimento dos cliques:** ", crescimento_cliques_formatado, "\n")
+  mes_anterior <- meses[length(meses) - 1]
+  mes_atual <- meses[length(meses)]
   
-  cat("- **Total de impressões em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_impressoes, "\n")
-  cat("- **Total de impressões em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_impressoes, "\n")
-  cat("- **Crescimento das impressões:** ", crescimento_impressoes_formatado, "\n")
+  # Formatar números para evitar notação científica
+  total_cliques_mes_anterior <- format(metricas_por_mes[[mes_anterior]]$total_cliques, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  total_cliques_mes_atual <- format(metricas_por_mes[[mes_atual]]$total_cliques, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  crescimento_cliques_formatado <- percent(comparacao$crescimento_cliques / 100, accuracy = 0.01, decimal.mark = ",")
   
-  cat("- **Posição média em ", mes_anterior, ":** ", round(metricas_por_mes[[mes_anterior]]$posicao_media, 2), "\n")
-  cat("- **Posição média em ", mes_atual, ":** ", round(metricas_por_mes[[mes_atual]]$posicao_media, 2), "\n")
-  cat("- **Mudança na posição média:** ", melhoria_posicao_media_formatado, "\n")
+  total_impressoes_mes_anterior <- format(metricas_por_mes[[mes_anterior]]$total_impressoes, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  total_impressoes_mes_atual <- format(metricas_por_mes[[mes_atual]]$total_impressoes, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  crescimento_impressoes_formatado <- percent(comparacao$crescimento_impressoes / 100, accuracy = 0.01, decimal.mark = ",")
   
-  cat("- **Quantidade de keywords em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_keywords, "\n")
-  cat("- **Quantidade de keywords em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_keywords, "\n")
-  cat("- **Mudança no número de keywords:** ", comparacao$mudanca_keywords, "\n")
+  posicao_media_mes_anterior <- round(metricas_por_mes[[mes_anterior]]$posicao_media, 2)
+  posicao_media_mes_atual <- round(metricas_mes_atual$posicao_media, 2)
+  melhoria_posicao_media <- posicao_media_mes_anterior - posicao_media_mes_atual
+  if (melhoria_posicao_media < 0) {
+    melhoria_posicao_media_formatado <- paste0(round(melhoria_posicao_media, 2), " (melhoria)")
+  } else {
+    melhoria_posicao_media_formatado <- paste0(round(melhoria_posicao_media, 2), " (piorou)")
+  }
   
-  cat("- **Quantidade de páginas em ", mes_anterior, ":** ", metricas_por_mes[[mes_anterior]]$total_paginas, "\n")
-  cat("- **Quantidade de páginas em ", mes_atual, ":** ", metricas_por_mes[[mes_atual]]$total_paginas, "\n")
-  cat("- **Mudança no número de páginas:** ", comparacao$mudanca_paginas, "\n")
+  total_keywords_mes_anterior <- format(metricas_por_mes[[mes_anterior]]$total_keywords, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  total_keywords_mes_atual <- format(metricas_mes_atual$total_keywords, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  mudanca_keywords_formatado <- format(comparacao$mudanca_keywords, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  
+  total_paginas_mes_anterior <- format(metricas_por_mes[[mes_anterior]]$total_paginas, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  total_paginas_mes_atual <- format(metricas_mes_atual$total_paginas, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  mudanca_paginas_formatado <- format(comparacao$mudanca_paginas, big.mark = ".", decimal.mark = ",", scientific = FALSE)
+  
 } else {
-  cat(mensagem_comparacao)
+  mensagem_comparacao <- "É necessário pelo menos dois meses para realizar a comparação."
 }
 ```
+
+- **Total de cliques em `r mes_anterior`:** `r total_cliques_mes_anterior`
+- **Total de cliques em `r mes_atual`:** `r total_cliques_mes_atual`
+- **Crescimento dos cliques:** `r crescimento_cliques_formatado`
+
+- **Total de impressões em `r mes_anterior`:** `r total_impressoes_mes_anterior`
+- **Total de impressões em `r mes_atual`:** `r total_impressoes_mes_atual`
+- **Crescimento das impressões:** `r crescimento_impressoes_formatado`
+
+- **Posição média em `r mes_anterior`:** `r posicao_media_mes_anterior`
+- **Posição média em `r mes_atual`:** `r posicao_media_mes_atual`
+- **Mudança na posição média:** `r melhoria_posicao_media_formatado`
+
+- **Quantidade de keywords em `r mes_anterior`:** `r total_keywords_mes_anterior`
+- **Quantidade de keywords em `r mes_atual`:** `r total_keywords_mes_atual`
+- **Mudança no número de keywords:** `r mudanca_keywords_formatado`
+
+- **Quantidade de páginas em `r mes_anterior`:** `r total_paginas_mes_anterior`
+- **Quantidade de páginas em `r mes_atual`:** `r total_paginas_mes_atual`
+- **Mudança no número de páginas:** `r mudanca_paginas_formatado`
 
 # Análises Adicionais
 
@@ -435,8 +465,6 @@ if (length(meses) >= 1) {
   mensagem_pagina_80 <- "Não há dados suficientes para analisar as páginas que geraram 80% do tráfego."
 }
 ```
-
-## Páginas Responsáveis por 80% dos Cliques no Mês Atual
 
 ```{r resultados_paginas_80, echo=FALSE}
 if (length(meses) >= 1) {
