@@ -21,11 +21,14 @@ library(scales)  # Para formatação de percentuais
 
 ```{r functions, echo=FALSE}
 # Função para extrair categoria da URL
+# precisa ser feito alguns ajustes nela
+# preciso incluir uma regra para que ela coloque as páginas de categoria pai sejam inclusas dentro das categorias, ou mesmo ser marcada como página de categoria, dessa forma ela pode performar melhor
+
 extrair_categoria <- function(url) {
   str_extract(url, "(?<=/faq/)[^/]+")
 }
 
-# Função para categorizar a posição em tiers
+# Função para categorizar a posição em tiers - essa aqui ta funcionando bem.
 categorizar_tier <- function(pos) {
   case_when(
     pos <= 3 ~ "1-3",
@@ -39,6 +42,11 @@ categorizar_tier <- function(pos) {
 }
 
 # Função para processar os dados
+# Aqui são tratado os dadoss associando a cada uma das variaveis seu devido tipo de dado
+# A lista é a seguinte
+# impre, cliques, pos = decimais
+# categoria são variaveis categoricas nominais
+# Tier são variaveis categoricas ordinais
 processar_dados <- function(df) {
   df %>%
     mutate(
