@@ -7,6 +7,15 @@ params:
 ---
 
 ```{r setup, include=FALSE}
+# sobre a versão atual
+# aqui, temos atualmente um script focado em criar analises mensais
+# Para utilizar-la basta exportar um arquivo do GSC
+# futuramente esse código pode ser melhorado fazendo o seguintes pontos
+# - Desenvolver os códigos que permitem se conctar diretamente no serviços da google
+# - talvez desenvolvover funções que permitam o calculo de projeções
+# - evolui-lo par
+
+
 knitr::opts_chunk$set(
 	echo = FALSE,
 	message = TRUE,
@@ -18,20 +27,23 @@ library(knitr)
 library(kableExtra)
 library(scales)  # Para formatação de percentuais
 
-# sobre a versão atual
-# aqui, temos atualmente uma 
+
 ```
 
 ```{r functions, echo=FALSE}
 # Função para extrair categoria da URL
+# COMO FUNCIONA -> ela extraí o que se econtra na string de URL entre o dominio e o endereço FAQ
 # precisa ser feito alguns ajustes nela
-# preciso incluir uma regra para que ela coloque as páginas de categoria pai sejam inclusas dentro das categorias, ou mesmo ser marcada como página de categoria, dessa forma ela pode performar melhor
+# preciso incluir uma regra para que ela coloque as páginas de categoria pai
+# sejam inclusas dentro das categorias, ou mesmo ser marcada como página de 
+# categoria, dessa forma ela pode performar melhor
 
 extrair_categoria <- function(url) {
-  str_extract(url, "(?<=/faq/)[^/]+")
+  str_extract(url, "(?<=/faq/)[^/]+") #altere /faq/ para o separador de categoria do seu site caso haja.
 }
 
 # Função para categorizar a posição em tiers - essa aqui ta funcionando bem.
+# básicamente ela categoriza a variavel de posição
 categorizar_tier <- function(pos) {
   case_when(
     pos <= 3 ~ "1-3",
@@ -99,8 +111,6 @@ comparar_metricas <- function(metricas_mes_anterior, metricas_mes_atual) {
     mudanca_paginas = metricas_mes_atual$total_paginas - metricas_mes_anterior$total_paginas
   )
 }
-
-# Funções adicionais para as análises extras
 
 # Função para calcular crescimento por categoria
 calcular_crescimento_categorias <- function(df_mes_anterior, df_mes_atual) {
