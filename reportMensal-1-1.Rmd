@@ -17,6 +17,9 @@ library(stringr)
 library(knitr)
 library(kableExtra)
 library(scales)  # Para formatação de percentuais
+
+# sobre a versão atual
+# aqui, temos atualmente uma 
 ```
 
 ```{r functions, echo=FALSE}
@@ -58,7 +61,8 @@ processar_dados <- function(df) {
     )
 }
 
-# Função para contar keywords por tier
+# Função para contar keywords por tier 
+# tipo, nessa aqui ele conta quantas keywords tem em cada rank encontrado no GSC
 contar_keywords_por_tier <- function(df, mes) {
   df %>%
     group_by(tier) %>%
